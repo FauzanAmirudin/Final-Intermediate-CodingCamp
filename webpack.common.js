@@ -2,12 +2,20 @@ const HtmlWebpackPlugin = require("html-webpack-plugin");
 const path = require("path");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 
+// Determine publicPath based on environment variable (e.g., DEPLOY_ENV)
+// For Netlify, it's usually '/', unless deployed to a specific subdirectory.
+// For GitHub Pages, it's '/<repository-name>/'
+const publicPath =
+  process.env.DEPLOY_ENV === "github-pages"
+    ? "/Project_FInal_Intermediate/"
+    : "/";
+
 module.exports = {
   entry: "./src/scripts/index.js",
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: "bundle.js",
-    publicPath: "/Project_FInal_Intermediate/",
+    publicPath: publicPath, // Use the dynamically determined publicPath
     clean: true,
   },
   module: {
