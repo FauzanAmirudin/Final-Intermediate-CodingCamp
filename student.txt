@@ -1,0 +1,6 @@
+Nama: Fauzan Amirudin Basith
+Email: fauzan223360@gmail.com
+Submission: Story App - Single Page Application
+
+API Keys:
+- Leaflet Map: Tidak memerlukan API key (menggunakan OpenStreetMap)

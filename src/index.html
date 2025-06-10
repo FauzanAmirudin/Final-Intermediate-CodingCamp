@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Football App - Progressive Web App for football information">
+    <meta name="theme-color" content="#000000">
+    <title>Story App</title>
+
+    <!-- PWA manifest -->
+    <link rel="manifest" href="/manifest.json">
+
+    <!-- Apple touch icon -->
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/icons/favicon-32x32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="/icons/favicon-16x16.png" sizes="16x16">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/src/styles/styles.css">
+</head>
+
+<body>
+    <header>
+        <!-- Skip to Content -->
+        <button class="skip-link" id="skip-link">Skip to main content</button>
+
+        <nav class="navbar">
+            <div class="nav-container">
+                <h1 class="nav-title">Story App</h1>
+                <ul class="nav-menu">
+                    <li><a href="#/home" class="nav-link">Home</a></li>
+                    <li><a href="#/matches" class="nav-link">Matches</a></li>
+                    <li><a href="#/saved" class="nav-link">Saved Matches</a></li>
+                    <li><a href="#/settings" class="nav-link">Settings</a></li>
+                </ul>
+            </div>
+        </nav>
+    </header>
+
+    <main id="main-content" class="main-content" tabindex="-1">
+        <div id="page-container"></div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2024 Story App. All rights reserved.</p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful');
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+    </script>
+</body>
+
+</html>
