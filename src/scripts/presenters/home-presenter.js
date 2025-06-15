@@ -1,80 +1,126 @@
 import { StoryAPI } from "../api/story-api.js";
 import { ApiError } from "../utils/api-error.js";
 import { AuthUtil } from "../utils/auth.js";
+import dbService from "../db.js";
 
 class HomePresenter {
   constructor(view) {
     this.view = view;
+    this.stories = [];
   }
 
   async loadStories() {
     try {
-      if (!this.view) {
-        console.error("View is not initialized");
-        return;
-      }
+      // Try to load stories from API
+      const apiResponse = await StoryAPI.getAllStories();
 
-      console.log("Loading matches...");
-      // Gunakan location=1 untuk mendapatkan matches dengan data lokasi
-      const result = await StoryAPI.getAllStories(1, 20, 1);
+      if (apiResponse.error === false && apiResponse.listStory) {
+        this.stories = apiResponse.listStory;
 
-      if (!this.view.hideLoading) {
-        console.error("View method hideLoading not found");
-        return;
-      }
+        // Save stories to IndexedDB for offline access
+        await this.saveStoriesToIndexedDB(this.stories);
 
-      this.view.hideLoading();
+        this.view.hideLoading();
+        this.view.renderStories(this.stories);
 
-      // Berdasarkan dokumentasi API: response memiliki error, message, dan listStory
-      if (result.error === false && result.listStory) {
-        const stories = result.listStory;
-        console.log("Matches count:", stories.length);
+        // If we have stories with location data, render the map
+        const storiesWithLocation = this.stories.filter(
+          (story) => story.lat && story.lon
+        );
 
-        if (!this.view.renderStories || !this.view.showNoStories) {
-          console.error("Required view methods not found");
-          return;
-        }
-
-        if (stories.length === 0) {
-          this.view.showNoStories();
-        } else {
-          this.view.renderStories(stories);
-
-          // Render map after a short delay to ensure DOM is ready
-          if (this.view.renderStoriesMap) {
-            setTimeout(() => {
-              this.view.renderStoriesMap(stories);
-            }, 500);
-          }
+        if (storiesWithLocation.length > 0) {
+          this.view.renderStoriesMap(this.stories);
         }
       } else {
-        throw new ApiError(result.message || "Failed to load matches", null);
+        throw new Error("Failed to load stories from API");
       }
     } catch (error) {
-      console.error("Error loading matches:", error);
+      console.error("Error loading stories from API:", error);
 
-      if (this.view.hideLoading) {
+      // If API request fails, try to load from IndexedDB
+      try {
+        console.log("Attempting to load stories from IndexedDB...");
+        const offlineStories = await dbService.getAllStories();
+
+        if (offlineStories && offlineStories.length > 0) {
+          console.log("Loaded stories from IndexedDB:", offlineStories.length);
+          this.stories = offlineStories;
+          this.view.hideLoading();
+          this.view.renderStories(this.stories);
+
+          // Show offline notification
+          this.view.showOfflineNotification();
+
+          // If we have stories with location data, render the map
+          const storiesWithLocation = this.stories.filter(
+            (story) => story.lat && story.lon
+          );
+
+          if (storiesWithLocation.length > 0) {
+            this.view.renderStoriesMap(this.stories);
+          }
+        } else {
+          // No stories in IndexedDB either
+          this.view.hideLoading();
+          this.view.showNoStories();
+        }
+      } catch (dbError) {
+        console.error("Error loading stories from IndexedDB:", dbError);
         this.view.hideLoading();
-      }
-
-      const errorMessage =
-        error instanceof ApiError
-          ? ApiError.handle(error)
-          : "Failed to load matches. Please try again later.";
-
-      if (this.view.showError) {
         this.view.showError(
-          errorMessage,
-          error instanceof ApiError ? error.status : "network"
+          "Failed to load stories. Please check your internet connection and try again."
         );
       }
+    }
+  }
 
-      if (error instanceof ApiError && error.status === 401) {
-        AuthUtil.logout();
-        setTimeout(() => {
-          window.location.hash = "#/login";
-        }, 2000);
+  async saveStoriesToIndexedDB(stories) {
+    try {
+      // Initialize database if not already initialized
+      await dbService.init();
+
+      // Save each story to IndexedDB
+      for (const story of stories) {
+        // Add timestamp when it was saved
+        story.savedAt = new Date().toISOString();
+
+        // Check if this story is already in favorites
+        const isFavorite = await dbService.isFavorite(story.id);
+        if (isFavorite) {
+          story.isFavorite = true;
+        }
+
+        await dbService.addStory(story);
       }
+
+      console.log(`Successfully saved ${stories.length} stories to IndexedDB`);
+    } catch (error) {
+      console.error("Error saving stories to IndexedDB:", error);
+    }
+  }
+
+  async addStoryToFavorites(storyId) {
+    try {
+      const story = this.stories.find((s) => s.id === storyId);
+      if (!story) {
+        throw new Error("Story not found");
+      }
+
+      await dbService.addToFavorites(story);
+      return true;
+    } catch (error) {
+      console.error("Error adding story to favorites:", error);
+      return false;
+    }
+  }
+
+  async removeStoryFromFavorites(storyId) {
+    try {
+      await dbService.removeFromFavorites(storyId);
+      return true;
+    } catch (error) {
+      console.error("Error removing story from favorites:", error);
+      return false;
     }
   }
 }

@@ -1,6 +1,7 @@
 import { MapComponent } from "../components/map.js";
 import { HomePresenter } from "../presenters/home-presenter.js";
 import { AuthUtil } from "../utils/auth.js";
+import dbService from "../db.js";
 
 class HomeView {
   constructor() {
@@ -19,12 +20,15 @@ class HomeView {
     container.innerHTML = `
       <div class="page">
         <section class="hero">
-          <h1>Welcome to Strory App</h1>
-          <p>Discover amazing Strory Appes from around the world</p>
+          <h1>Welcome to Story App</h1>
+          <p>Discover amazing stories from around the world</p>
         </section>
+        <div id="offline-notification" class="offline-notification" style="display: none;">
+          <p>You are currently offline. Showing saved stories.</p>
+        </div>
         <section class="stories-section">
           <div class="stories-header">
-            <h2>Latest Storyes</h2>
+            <h2>Latest Stories</h2>
             ${
               isLoggedIn
                 ? `<a href="#/add" class="btn btn-primary">Add New Story</a>`
@@ -33,7 +37,7 @@ class HomeView {
           </div>
           <div class="loading" id="loading-indicator">
             <div class="loading-spinner"></div>
-            <p>Loading Storyes...</p>
+            <p>Loading Stories...</p>
           </div>
           <div id="stories-container"></div>
         </section>
@@ -69,6 +73,9 @@ class HomeView {
         ${stories.map((story) => this.createStoryCard(story)).join("")}
       </div>
     `;
+
+    // Add event listeners to favorite buttons
+    this.addFavoriteButtonListeners();
   }
 
   createStoryCard(story) {
@@ -79,6 +86,7 @@ class HomeView {
     const name = story.name || "Anonymous";
     const description = story.description || "No description available";
     const photoUrl = story.photoUrl || "";
+    const isFavorite = story.isFavorite || false;
 
     let createdDate = "Unknown date";
     if (story.createdAt) {
@@ -121,9 +129,121 @@ class HomeView {
                 : ""
             }
           </div>
+          <div class="story-actions">
+            ${
+              AuthUtil.isAuthenticated()
+                ? `
+              <button class="btn ${
+                isFavorite
+                  ? "btn-danger remove-favorite-btn"
+                  : "btn-secondary add-favorite-btn"
+              }" 
+                      data-story-id="${storyId}">
+                ${isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              </button>
+            `
+                : ""
+            }
+          </div>
         </div>
       </article>
     `;
+  }
+
+  addFavoriteButtonListeners() {
+    // Add to favorites buttons
+    const addFavoriteButtons = document.querySelectorAll(".add-favorite-btn");
+    addFavoriteButtons.forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        const storyId = event.target.dataset.storyId;
+        try {
+          const success = await this.presenter.addStoryToFavorites(storyId);
+          if (success) {
+            // Update button appearance
+            button.classList.remove("btn-secondary");
+            button.classList.add("btn-danger");
+            button.classList.remove("add-favorite-btn");
+            button.classList.add("remove-favorite-btn");
+            button.textContent = "Remove from Favorites";
+
+            // Update event listener
+            button.removeEventListener("click", () => {});
+            button.addEventListener(
+              "click",
+              this.handleRemoveFavorite.bind(this)
+            );
+
+            // Show success notification
+            this.showNotification("Story added to favorites");
+          }
+        } catch (error) {
+          console.error("Error adding to favorites:", error);
+          this.showNotification("Failed to add to favorites", "error");
+        }
+      });
+    });
+
+    // Remove from favorites buttons
+    const removeFavoriteButtons = document.querySelectorAll(
+      ".remove-favorite-btn"
+    );
+    removeFavoriteButtons.forEach((button) => {
+      button.addEventListener("click", this.handleRemoveFavorite.bind(this));
+    });
+  }
+
+  async handleRemoveFavorite(event) {
+    const storyId = event.target.dataset.storyId;
+    try {
+      const success = await this.presenter.removeStoryFromFavorites(storyId);
+      if (success) {
+        // Update button appearance
+        const button = event.target;
+        button.classList.remove("btn-danger");
+        button.classList.add("btn-secondary");
+        button.classList.remove("remove-favorite-btn");
+        button.classList.add("add-favorite-btn");
+        button.textContent = "Add to Favorites";
+
+        // Update event listener
+        button.removeEventListener("click", this.handleRemoveFavorite);
+        button.addEventListener("click", async (e) => {
+          const id = e.target.dataset.storyId;
+          await this.presenter.addStoryToFavorites(id);
+        });
+
+        // Show success notification
+        this.showNotification("Story removed from favorites");
+      }
+    } catch (error) {
+      console.error("Error removing from favorites:", error);
+      this.showNotification("Failed to remove from favorites", "error");
+    }
+  }
+
+  showNotification(message, type = "success") {
+    // Create notification element
+    const notification = document.createElement("div");
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+
+    // Add to document
+    document.body.appendChild(notification);
+
+    // Remove after 3 seconds
+    setTimeout(() => {
+      notification.classList.add("fade-out");
+      setTimeout(() => {
+        document.body.removeChild(notification);
+      }, 500);
+    }, 3000);
+  }
+
+  showOfflineNotification() {
+    const notification = document.getElementById("offline-notification");
+    if (notification) {
+      notification.style.display = "block";
+    }
   }
 
   renderStoriesMap(stories) {
@@ -249,34 +369,46 @@ class HomeView {
       return;
     }
 
-    const isAuthError = type === "auth" || type === 401;
-    const isNetworkError = type === "network";
-
     storiesContainer.innerHTML = `
-      <div class="error">
-        <h3>Oops! Something went wrong</h3>
+      <div class="error-container error-${type}">
+        <div class="error-icon">⚠️</div>
+        <h3>Error</h3>
         <p>${message}</p>
-        <div class="error-actions">
-          ${
-            isAuthError
-              ? '<a href="#/login" class="btn btn-primary">Login</a>'
-              : '<button onclick="location.reload()" class="btn btn-primary">Try Again</button>'
-          }
-          ${
-            !isAuthError && !isNetworkError
-              ? '<a href="#/add" class="btn btn-secondary">Add New Story</a>'
-              : ""
-          }
-        </div>
+        <button id="retry-button" class="btn btn-primary">Try Again</button>
       </div>
     `;
+
+    const retryButton = document.getElementById("retry-button");
+    if (retryButton) {
+      retryButton.addEventListener("click", () => {
+        this.render();
+      });
+    }
   }
 
   escapeHtml(text) {
     if (!text) return "";
-    const div = document.createElement("div");
-    div.textContent = text.toString();
-    return div.innerHTML;
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  destroy() {
+    // Clean up event listeners
+    const addFavoriteButtons = document.querySelectorAll(".add-favorite-btn");
+    addFavoriteButtons.forEach((button) => {
+      button.removeEventListener("click", () => {});
+    });
+
+    const removeFavoriteButtons = document.querySelectorAll(
+      ".remove-favorite-btn"
+    );
+    removeFavoriteButtons.forEach((button) => {
+      button.removeEventListener("click", this.handleRemoveFavorite);
+    });
   }
 }
 

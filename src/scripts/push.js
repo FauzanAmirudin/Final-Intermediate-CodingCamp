@@ -1,9 +1,11 @@
+import { CONFIG } from "./utils/config.js";
+import { AuthUtil } from "./utils/auth.js";
+
 class PushNotificationService {
   constructor() {
-    // VAPID keys from the API
+    // VAPID public key from the Dicoding API
     this.publicVapidKey =
-      "BCCs2eonMI-6H2ctvFaWg-UYdDv387Vno_bzUzALpB442r2lCnsHmtrx8biyPi_E-1fSGABK_Qs_GlvPoJJqxbk";
-    this.privateVapidKey = "VAPID_PRIVATE_KEY"; // This should be kept secure on the server side
+      "BN7-r0Svv7CsTi18-OPYtJLVW0bfuZ1x1UtrygczKjennA_qs7OWmgOewcuYSYF3Gc_mPbqsDh2YoGCDPL0W7Yo";
   }
 
   // Convert VAPID key to Uint8Array
@@ -29,24 +31,26 @@ class PushNotificationService {
         const registration = await navigator.serviceWorker.register(
           "/service-worker.js"
         );
-        console.log("Service Worker registered successfully");
+        console.log("Service Worker registered successfully:", registration);
         return registration;
       } catch (error) {
         console.error("Service Worker registration failed:", error);
         throw error;
       }
+    } else {
+      throw new Error("Service Worker not supported in this browser");
     }
-    throw new Error("Service Worker not supported");
   }
 
   // Subscribe to push notifications
   async subscribeToPushNotifications() {
     try {
-      const registration = await this.registerServiceWorker();
+      // Register service worker first
+      const registration = await navigator.serviceWorker.ready;
 
       // Check if push notification is supported
       if (!("PushManager" in window)) {
-        throw new Error("Push notifications not supported");
+        throw new Error("Push notifications not supported in this browser");
       }
 
       // Check permission
@@ -55,11 +59,20 @@ class PushNotificationService {
         throw new Error("Notification permission denied");
       }
 
-      // Get push subscription
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: this.urlBase64ToUint8Array(this.publicVapidKey),
-      });
+      // Get existing subscription or create a new one
+      let subscription = await registration.pushManager.getSubscription();
+
+      if (!subscription) {
+        // Create a new subscription
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: this.urlBase64ToUint8Array(this.publicVapidKey),
+        });
+
+        console.log("Created new push subscription:", subscription);
+      } else {
+        console.log("Using existing push subscription:", subscription);
+      }
 
       // Send subscription to server
       await this.sendSubscriptionToServer(subscription);
@@ -78,10 +91,15 @@ class PushNotificationService {
       const subscription = await registration.pushManager.getSubscription();
 
       if (subscription) {
-        await subscription.unsubscribe();
+        // Remove subscription from server first
         await this.removeSubscriptionFromServer(subscription);
-        return true;
+
+        // Then unsubscribe locally
+        const result = await subscription.unsubscribe();
+        console.log("Unsubscribed from push notifications:", result);
+        return result;
       }
+
       return false;
     } catch (error) {
       console.error("Error unsubscribing from push notifications:", error);
@@ -92,33 +110,60 @@ class PushNotificationService {
   // Send subscription to server
   async sendSubscriptionToServer(subscription) {
     try {
-      const response = await fetch(
-        `${CONFIG.API_BASE_URL}/notifications/subscribe`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${AuthUtil.getToken()}`,
-          },
-          body: JSON.stringify({
-            endpoint: subscription.endpoint,
-            keys: {
-              p256dh: subscription.keys.p256dh,
-              auth: subscription.keys.auth,
-            },
-          }),
-        }
+      // Check if user is authenticated
+      if (!AuthUtil.isAuthenticated()) {
+        console.warn(
+          "User not authenticated, cannot send subscription to server"
+        );
+        return false;
+      }
+
+      const token = AuthUtil.getToken();
+
+      // Prepare subscription data in the format expected by Dicoding API
+      const p256dh = btoa(
+        String.fromCharCode.apply(
+          null,
+          new Uint8Array(subscription.getKey("p256dh"))
+        )
       );
+      const auth = btoa(
+        String.fromCharCode.apply(
+          null,
+          new Uint8Array(subscription.getKey("auth"))
+        )
+      );
+
+      console.log("Sending subscription to server with data:", {
+        endpoint: subscription.endpoint,
+        p256dh,
+        auth,
+      });
+
+      const response = await fetch(`${CONFIG.API_BASE_URL}/push`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          endpoint: subscription.endpoint,
+          p256dh,
+          auth,
+        }),
+      });
 
       if (!response.ok) {
         const data = await response.json();
-        throw new ApiError(
-          data.message || "Failed to send subscription to server",
-          response.status
+        console.error("Server response error:", data);
+        throw new Error(
+          data.message || "Failed to send subscription to server"
         );
       }
 
-      return await response.json();
+      const result = await response.json();
+      console.log("Subscription sent to server successfully:", result);
+      return result;
     } catch (error) {
       console.error("Error sending subscription to server:", error);
       throw error;
@@ -128,29 +173,37 @@ class PushNotificationService {
   // Remove subscription from server
   async removeSubscriptionFromServer(subscription) {
     try {
-      const response = await fetch(
-        `${CONFIG.API_BASE_URL}/notifications/subscribe`,
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${AuthUtil.getToken()}`,
-          },
-          body: JSON.stringify({
-            endpoint: subscription.endpoint,
-          }),
-        }
-      );
+      // Check if user is authenticated
+      if (!AuthUtil.isAuthenticated()) {
+        console.warn(
+          "User not authenticated, cannot remove subscription from server"
+        );
+        return false;
+      }
+
+      const token = AuthUtil.getToken();
+
+      const response = await fetch(`${CONFIG.API_BASE_URL}/push`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          endpoint: subscription.endpoint,
+        }),
+      });
 
       if (!response.ok) {
         const data = await response.json();
-        throw new ApiError(
-          data.message || "Failed to remove subscription from server",
-          response.status
+        throw new Error(
+          data.message || "Failed to remove subscription from server"
         );
       }
 
-      return await response.json();
+      const result = await response.json();
+      console.log("Subscription removed from server successfully:", result);
+      return result;
     } catch (error) {
       console.error("Error removing subscription from server:", error);
       throw error;
@@ -166,18 +219,27 @@ class PushNotificationService {
       };
     }
 
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
+    const permission = Notification.permission;
+
+    if (permission === "granted") {
+      return {
+        supported: true,
+        message: "Push notifications are supported and enabled",
+        permission: permission,
+      };
+    } else if (permission === "denied") {
       return {
         supported: false,
         message: "Notification permission denied",
+        permission: permission,
+      };
+    } else {
+      return {
+        supported: true,
+        message: "Push notifications are supported but not enabled yet",
+        permission: permission,
       };
     }
-
-    return {
-      supported: true,
-      message: "Push notifications are supported and enabled",
-    };
   }
 }
 

@@ -1,6 +1,8 @@
 import { CameraComponent } from "../components/camera.js";
 import { MapComponent } from "../components/map.js";
 import { AddStoryPresenter } from "../presenters/add-story-presenter.js";
+import { StoryAPI } from "../api/story-api.js";
+import pushService from "../push.js";
 
 class AddStoryView {
   constructor(router) {
@@ -9,6 +11,9 @@ class AddStoryView {
     this.camera = null;
     this.map = null;
     this.selectedLocation = null;
+    this.mapComponent = null;
+    this.photoPreview = null;
+    this.selectedPosition = null;
   }
 
   render() {
@@ -17,6 +22,7 @@ class AddStoryView {
       <div class="page">
         <h2 tabindex="-1" id="add-story-heading">Add New Story</h2>
         <section class="add-story-section">
+          <div id="notification-container" class="notification-container"></div>
           <form id="add-story-form" class="form-container" novalidate>
             <div class="form-group">
               <label for="story-description" class="form-label">Description *</label>
@@ -46,6 +52,13 @@ class AddStoryView {
               <div class="form-error" id="location-error"></div>
             </div>
             
+            <div class="form-group notification-opt-in">
+              <label>
+                <input type="checkbox" id="enable-notifications" checked>
+                Enable notifications for new stories
+              </label>
+            </div>
+            
             <div class="form-actions">
               <button type="submit" class="btn btn-primary" id="submit-btn">
                 <span class="btn-text">Add Story</span>
@@ -70,6 +83,7 @@ class AddStoryView {
       if (heading) {
         heading.focus();
       }
+      this.setupPushNotificationSubscription();
     }, 100);
   }
 
@@ -207,6 +221,138 @@ class AddStoryView {
       }
     } catch (error) {
       console.error("Error destroying view:", error);
+    }
+  }
+
+  initMap() {
+    setTimeout(() => {
+      try {
+        this.mapComponent = new MapComponent("location-map", {
+          clickable: true,
+          showPopup: false,
+          zoom: 5,
+        });
+        this.mapComponent.init();
+
+        this.mapComponent.onMapClick((e) => {
+          const { lat, lng } = e.latlng;
+          this.selectedPosition = { lat, lng };
+          this.updateLocationInfo();
+          this.mapComponent.addMarker(lat, lng);
+        });
+      } catch (error) {
+        console.error("Error initializing map:", error);
+        const mapContainer = document.getElementById("location-map");
+        mapContainer.innerHTML = `
+          <div class="map-error">
+            <p>Unable to load map</p>
+            <small>Error: ${error.message}</small>
+          </div>
+        `;
+      }
+    }, 100);
+  }
+
+  updateLocationInfo() {
+    const locationInfo = document.getElementById("location-info");
+    if (this.selectedPosition) {
+      const { lat, lng } = this.selectedPosition;
+      locationInfo.innerHTML = `
+        <p>Selected location: ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
+      `;
+    } else {
+      locationInfo.innerHTML = `<p>No location selected</p>`;
+    }
+  }
+
+  setupPhotoPreview() {
+    const photoInput = document.getElementById("story-description");
+    const previewContainer = document.getElementById("camera-container");
+
+    photoInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) {
+        previewContainer.innerHTML = `<p>No photo selected</p>`;
+        this.photoPreview = null;
+        return;
+      }
+
+      if (!file.type.startsWith("image/")) {
+        previewContainer.innerHTML = `<p class="error">Please select an image file</p>`;
+        this.photoPreview = null;
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        this.photoPreview = event.target.result;
+        previewContainer.innerHTML = `
+          <img src="${this.photoPreview}" alt="Preview" class="photo-preview" />
+        `;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async setupPushNotificationSubscription() {
+    try {
+      const pushSupport = await pushService.checkPushSupport();
+      const notificationContainer = document.getElementById(
+        "notification-container"
+      );
+
+      if (!pushSupport.supported) {
+        notificationContainer.innerHTML = `
+          <div class="notification-prompt warning">
+            <p>Your browser doesn't support push notifications.</p>
+          </div>
+        `;
+        return;
+      }
+
+      if (pushSupport.permission === "denied") {
+        notificationContainer.innerHTML = `
+          <div class="notification-prompt warning">
+            <p>Push notifications are blocked. Please enable them in your browser settings.</p>
+          </div>
+        `;
+      } else if (pushSupport.permission === "default") {
+        notificationContainer.innerHTML = `
+          <div class="notification-prompt">
+            <p>Get notified when new stories are added!</p>
+            <button class="btn btn-primary" id="enable-notifications-btn">Enable Notifications</button>
+          </div>
+        `;
+
+        document
+          .getElementById("enable-notifications-btn")
+          .addEventListener("click", async () => {
+            try {
+              await pushService.subscribeToPushNotifications();
+              notificationContainer.innerHTML = `
+              <div class="notification-prompt success">
+                <p>Notifications enabled successfully!</p>
+              </div>
+            `;
+
+              setTimeout(() => {
+                notificationContainer.innerHTML = "";
+              }, 3000);
+            } catch (error) {
+              console.error("Failed to enable notifications:", error);
+              notificationContainer.innerHTML = `
+              <div class="notification-prompt error">
+                <p>Failed to enable notifications: ${error.message}</p>
+              </div>
+            `;
+            }
+          });
+      } else {
+        // Already granted
+        console.log("Push notifications already enabled");
+      }
+    } catch (error) {
+      console.error("Error checking push notification support:", error);
     }
   }
 }

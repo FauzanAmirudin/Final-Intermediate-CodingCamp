@@ -8,6 +8,10 @@ import { AddStoryView } from "./views/add-story-view.js";
 import { LoginView } from "./views/login-view.js";
 import { RegisterView } from "./views/register-view.js";
 import { AuthUtil } from "./utils/auth.js";
+import dbService from "./db.js";
+import pushService from "./push.js";
+import { FavoritesView } from "./views/favorites-view.js";
+import { SavedStoriesView } from "./views/saved-stories-view.js";
 
 class App {
   constructor() {
@@ -17,16 +21,75 @@ class App {
     this.setupSkipToContent();
   }
 
-  init() {
+  async init() {
+    // Initialize IndexedDB
+    try {
+      await dbService.init();
+      console.log("IndexedDB initialized successfully");
+    } catch (error) {
+      console.error("Failed to initialize IndexedDB:", error);
+    }
+
+    // Register service worker
+    this.registerServiceWorker();
+
+    // Setup routes and navigation
     this.setupRoutes();
     this.setupNavigation();
     this.setupAuthCheck();
 
+    // Handle unhandled promise rejections
     window.addEventListener("unhandledrejection", (event) => {
       console.error("Unhandled promise rejection:", event.reason);
     });
 
+    // Handle route
     this.router.handleRoute();
+  }
+
+  registerServiceWorker() {
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", async () => {
+        try {
+          const registration = await navigator.serviceWorker.register(
+            "/service-worker.js"
+          );
+          console.log(
+            "ServiceWorker registration successful with scope:",
+            registration.scope
+          );
+
+          // Check if user is authenticated, then subscribe to push notifications
+          if (AuthUtil.isAuthenticated()) {
+            this.subscribeToPushNotifications();
+          }
+        } catch (error) {
+          console.error("ServiceWorker registration failed:", error);
+        }
+      });
+    } else {
+      console.warn("Service workers are not supported in this browser");
+    }
+  }
+
+  async subscribeToPushNotifications() {
+    try {
+      const pushSupport = await pushService.checkPushSupport();
+      if (pushSupport.supported && pushSupport.permission === "granted") {
+        await pushService.subscribeToPushNotifications();
+        console.log("Successfully subscribed to push notifications");
+      } else if (pushSupport.supported && pushSupport.permission !== "denied") {
+        const permission = await Notification.requestPermission();
+        if (permission === "granted") {
+          await pushService.subscribeToPushNotifications();
+          console.log(
+            "Successfully subscribed to push notifications after permission grant"
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Failed to subscribe to push notifications:", error);
+    }
   }
 
   setupRoutes() {
@@ -34,6 +97,8 @@ class App {
     this.router.addRoute("/add", () => this.renderAddStory());
     this.router.addRoute("/login", () => this.renderLogin());
     this.router.addRoute("/register", () => this.renderRegister());
+    this.router.addRoute("/favorites", () => this.renderFavorites());
+    this.router.addRoute("/saved", () => this.renderSavedStories());
   }
 
   setupNavigation() {
@@ -49,7 +114,7 @@ class App {
   setupAuthCheck() {
     window.addEventListener("hashchange", () => {
       const currentRoute = this.router.getCurrentRoute();
-      const protectedRoutes = ["/add"];
+      const protectedRoutes = ["/add", "/favorites", "/saved"];
 
       if (
         protectedRoutes.includes(currentRoute) &&
@@ -81,6 +146,8 @@ class App {
       navMenu.innerHTML = `
         <li><a href="#/home" class="nav-link">Home</a></li>
         <li><a href="#/add" class="nav-link">Add Story</a></li>
+        <li><a href="#/favorites" class="nav-link">Favorites</a></li>
+        <li><a href="#/saved" class="nav-link">Saved Stories</a></li>
         <li class="user-menu">
           <span class="user-name">Hello, ${userInfo.name}</span>
           <button class="btn btn-secondary btn-small" onclick="window.app.logout()">Logout</button>
@@ -150,7 +217,36 @@ class App {
     this.currentView.render();
   }
 
-  logout() {
+  renderFavorites() {
+    if (!AuthUtil.isAuthenticated()) {
+      this.router.navigate("/login");
+      return;
+    }
+
+    this.destroyCurrentView();
+    this.currentView = new FavoritesView();
+    this.currentView.render();
+  }
+
+  renderSavedStories() {
+    if (!AuthUtil.isAuthenticated()) {
+      this.router.navigate("/login");
+      return;
+    }
+
+    this.destroyCurrentView();
+    this.currentView = new SavedStoriesView();
+    this.currentView.render();
+  }
+
+  async logout() {
+    try {
+      // Unsubscribe from push notifications
+      await pushService.unsubscribeFromPushNotifications();
+    } catch (error) {
+      console.error("Error unsubscribing from push notifications:", error);
+    }
+
     AuthUtil.logout();
     this.updateNavbar();
     this.router.navigate("/login");
