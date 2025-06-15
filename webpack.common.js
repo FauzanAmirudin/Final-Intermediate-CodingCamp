@@ -11,10 +11,11 @@ const publicPath =
     : "/";
 
 module.exports = {
-  entry: "./src/scripts/index.js",
+  entry: {
+    main: "./src/scripts/index.js",
+  },
   output: {
     path: path.resolve(__dirname, "dist"),
-    filename: "bundle.js",
     publicPath: publicPath, // Use the dynamically determined publicPath
     clean: true,
   },
@@ -36,6 +37,7 @@ module.exports = {
         { from: "manifest.json", to: "" },
         { from: "icons", to: "icons" },
         { from: "src/service-worker.js", to: "service-worker.js" },
+        { from: "_redirects", to: "" },
       ],
     }),
     new HtmlWebpackPlugin({

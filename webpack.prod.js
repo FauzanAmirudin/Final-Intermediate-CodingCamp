@@ -4,6 +4,10 @@ const webpack = require("webpack");
 
 module.exports = merge(common, {
   mode: "production",
+  output: {
+    filename: "[name].[contenthash].js",
+    chunkFilename: "[name].[contenthash].chunk.js",
+  },
   optimization: {
     splitChunks: {
       chunks: "all",
@@ -18,11 +22,13 @@ module.exports = merge(common, {
         defaultVendors: {
           test: /[\\/]node_modules[\\/]/,
           priority: -10,
+          name: "vendors",
         },
         default: {
           minChunks: 2,
           priority: -20,
           reuseExistingChunk: true,
+          name: "common",
         },
       },
     },

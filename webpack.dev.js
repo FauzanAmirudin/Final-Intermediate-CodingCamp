@@ -5,6 +5,9 @@ const webpack = require("webpack");
 module.exports = merge(common, {
   mode: "development",
   devtool: "inline-source-map",
+  output: {
+    filename: "bundle.js",
+  },
   plugins: [
     new webpack.DefinePlugin({
       "process.env.NODE_ENV": JSON.stringify("development"),
