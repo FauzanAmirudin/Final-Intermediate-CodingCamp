@@ -1237,3 +1237,42 @@ body {
   color: #721c24;
   border: 1px solid #f5c6cb;
 }
+
+/* PWA Install Banner */
+.install-banner {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  margin: 1rem 0;
+  padding: 1rem;
+  animation: slideIn 0.3s ease-out;
+}
+
+.install-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.install-content p {
+  margin: 0;
+  font-weight: 500;
+}
+
+.install-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

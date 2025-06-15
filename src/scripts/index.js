@@ -17,8 +17,10 @@ class App {
   constructor() {
     this.router = new Router();
     this.currentView = null;
+    this.deferredPrompt = null;
     this.init();
     this.setupSkipToContent();
+    this.setupInstallPrompt();
   }
 
   async init() {
@@ -45,6 +47,90 @@ class App {
 
     // Handle route
     this.router.handleRoute();
+  }
+
+  setupInstallPrompt() {
+    // Capture the install prompt event
+    window.addEventListener("beforeinstallprompt", (e) => {
+      // Prevent Chrome 67 and earlier from automatically showing the prompt
+      e.preventDefault();
+      // Stash the event so it can be triggered later
+      this.deferredPrompt = e;
+
+      // Show the install button after a delay to ensure UI is ready
+      setTimeout(() => {
+        this.showInstallButton();
+      }, 3000);
+    });
+
+    // Listen for app installed event
+    window.addEventListener("appinstalled", () => {
+      console.log("PWA was installed");
+      this.hideInstallButton();
+    });
+  }
+
+  showInstallButton() {
+    // Only show if we have the deferred prompt and user is on home page
+    if (!this.deferredPrompt) return;
+
+    const currentRoute = this.router.getCurrentRoute();
+    if (currentRoute !== "/home") return;
+
+    // Check if install button already exists
+    if (document.getElementById("pwa-install-button")) return;
+
+    // Create install button
+    const installBanner = document.createElement("div");
+    installBanner.className = "install-banner";
+    installBanner.id = "pwa-install-banner";
+    installBanner.innerHTML = `
+      <div class="install-content">
+        <p>Install Story App for a better experience!</p>
+        <div class="install-actions">
+          <button id="pwa-install-button" class="btn btn-primary">Install</button>
+          <button id="pwa-dismiss-button" class="btn btn-secondary">Not Now</button>
+        </div>
+      </div>
+    `;
+
+    // Add to page
+    const mainContent = document.getElementById("main-content");
+    if (mainContent) {
+      mainContent.prepend(installBanner);
+
+      // Add event listeners
+      document
+        .getElementById("pwa-install-button")
+        .addEventListener("click", this.installPWA.bind(this));
+      document
+        .getElementById("pwa-dismiss-button")
+        .addEventListener("click", this.hideInstallButton.bind(this));
+    }
+  }
+
+  hideInstallButton() {
+    const banner = document.getElementById("pwa-install-banner");
+    if (banner) {
+      banner.remove();
+    }
+  }
+
+  async installPWA() {
+    if (!this.deferredPrompt) return;
+
+    // Show the prompt
+    this.deferredPrompt.prompt();
+
+    // Wait for the user to respond to the prompt
+    const choiceResult = await this.deferredPrompt.userChoice;
+    console.log("User installation choice:", choiceResult.outcome);
+
+    // Clear the saved prompt as it can only be used once
+    this.deferredPrompt = null;
+
+    // Hide the install button
+    this.hideInstallButton();
   }
 
   registerServiceWorker() {
@@ -182,6 +268,11 @@ class App {
     this.destroyCurrentView();
     this.currentView = new HomeView();
     this.currentView.render();
+
+    // Check if we should show install prompt on home page
+    if (this.deferredPrompt) {
+      this.showInstallButton();
+    }
   }
 
   renderAddStory() {
