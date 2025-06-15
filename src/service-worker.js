@@ -136,15 +136,16 @@ self.addEventListener("push", (event) => {
     const data = event.data.json();
     console.log("[Service Worker] Push data:", data);
 
+    // Format according to Dicoding API schema
     notificationData = {
       title: data.title || "Story App Notification",
       options: {
-        body: data.message || "New update available",
+        body: data.options?.body || "New update available",
         icon: "/icons/icon-192x192.png",
         badge: "/icons/icon-72x72.png",
         data: {
           dateOfArrival: Date.now(),
-          url: data.url || "/",
+          url: "/",
           primaryKey: 1,
         },
         actions: [

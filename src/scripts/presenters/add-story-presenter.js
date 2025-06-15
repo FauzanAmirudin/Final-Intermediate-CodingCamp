@@ -1,5 +1,7 @@
 import { StoryAPI } from "../api/story-api.js";
 import { ApiError } from "../utils/api-error.js";
+import pushService from "../push.js";
+import dbService from "../db.js";
 
 class AddStoryPresenter {
   constructor(view, router) {
@@ -13,6 +15,50 @@ class AddStoryPresenter {
       const result = await StoryAPI.addStory(formData);
 
       if (result.error === false) {
+        // Save story to IndexedDB
+        try {
+          const description = formData.get("description");
+          const storyData = {
+            id: `story-${Date.now()}`, // Generate temporary ID
+            name: "My Story",
+            description: description,
+            createdAt: new Date().toISOString(),
+            savedAt: new Date().toISOString(),
+          };
+
+          // Try to get photo URL from form data and create object URL
+          const photo = formData.get("photo");
+          if (photo && photo instanceof Blob) {
+            storyData.photoUrl = URL.createObjectURL(photo);
+          }
+
+          // Add location if available
+          const lat = formData.get("lat");
+          const lon = formData.get("lon");
+          if (lat && lon) {
+            storyData.lat = parseFloat(lat);
+            storyData.lon = parseFloat(lon);
+          }
+
+          await dbService.addStory(storyData);
+          console.log("Story saved to IndexedDB");
+        } catch (dbError) {
+          console.error("Failed to save story to IndexedDB:", dbError);
+        }
+
+        // Check if push notifications are enabled and subscribe if needed
+        try {
+          const pushSupport = await pushService.checkPushSupport();
+          if (pushSupport.supported && pushSupport.permission === "granted") {
+            await pushService.subscribeToPushNotifications();
+            console.log(
+              "Push notification subscription refreshed after adding story"
+            );
+          }
+        } catch (pushError) {
+          console.error("Error with push notification:", pushError);
+        }
+
         this.view.showMessage(
           "Story added successfully! Redirecting...",
           "success"

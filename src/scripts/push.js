@@ -5,7 +5,7 @@ class PushNotificationService {
   constructor() {
     // VAPID public key from the Dicoding API
     this.publicVapidKey =
-      "BN7-r0Svv7CsTi18-OPYtJLVW0bfuZ1x1UtrygczKjennA_qs7OWmgOewcuYSYF3Gc_mPbqsDh2YoGCDPL0W7Yo";
+      "BCCs2eonMI-6H2ctvFaWg-UYdDv387Vno_bzUzALpB442r2lCnsHmtrx8biyPi_E-1fSGABK_Qs_GlvPoJJqxbk";
   }
 
   // Convert VAPID key to Uint8Array
@@ -120,38 +120,44 @@ class PushNotificationService {
 
       const token = AuthUtil.getToken();
 
-      // Prepare subscription data in the format expected by Dicoding API
+      // Extract keys from subscription
+      const rawP256dh = subscription.getKey("p256dh");
+      const rawAuth = subscription.getKey("auth");
+
+      // Convert keys to base64 strings
       const p256dh = btoa(
-        String.fromCharCode.apply(
-          null,
-          new Uint8Array(subscription.getKey("p256dh"))
-        )
+        String.fromCharCode.apply(null, new Uint8Array(rawP256dh))
       );
       const auth = btoa(
-        String.fromCharCode.apply(
-          null,
-          new Uint8Array(subscription.getKey("auth"))
-        )
+        String.fromCharCode.apply(null, new Uint8Array(rawAuth))
       );
 
       console.log("Sending subscription to server with data:", {
         endpoint: subscription.endpoint,
-        p256dh,
-        auth,
-      });
-
-      const response = await fetch(`${CONFIG.API_BASE_URL}/push`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          endpoint: subscription.endpoint,
+        keys: {
           p256dh,
           auth,
-        }),
+        },
       });
+
+      // Format payload according to API documentation
+      const response = await fetch(
+        `${CONFIG.API_BASE_URL}/notifications/subscribe`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            endpoint: subscription.endpoint,
+            keys: {
+              p256dh,
+              auth,
+            },
+          }),
+        }
+      );
 
       if (!response.ok) {
         const data = await response.json();
@@ -183,16 +189,19 @@ class PushNotificationService {
 
       const token = AuthUtil.getToken();
 
-      const response = await fetch(`${CONFIG.API_BASE_URL}/push`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          endpoint: subscription.endpoint,
-        }),
-      });
+      const response = await fetch(
+        `${CONFIG.API_BASE_URL}/notifications/subscribe`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            endpoint: subscription.endpoint,
+          }),
+        }
+      );
 
       if (!response.ok) {
         const data = await response.json();
