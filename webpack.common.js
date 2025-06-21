@@ -24,6 +24,9 @@ module.exports = {
       {
         test: /\.(png|svg|jpg|jpeg|gif)$/i,
         type: "asset/resource",
+        generator: {
+          filename: "images/[name].[hash:8][ext]",
+        },
       },
     ],
   },
@@ -32,12 +35,22 @@ module.exports = {
       patterns: [
         { from: "manifest.json", to: "" },
         { from: "icons", to: "icons" },
-        { from: "_redirects", to: "" },
       ],
     }),
     new HtmlWebpackPlugin({
       template: "./index.html",
       filename: "index.html",
+      scriptLoading: "defer",
+      favicon: "./icons/favicon-32x32.png",
+      meta: {
+        viewport: "width=device-width, initial-scale=1.0",
+        description: "Story App - Progressive Web App for sharing stories",
+        "theme-color": "#000000",
+      },
+      minify: {
+        removeComments: true,
+        collapseWhitespace: true,
+      },
     }),
   ],
   resolve: {

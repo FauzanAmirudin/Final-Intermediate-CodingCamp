@@ -78,6 +78,23 @@ registerRoute(
   })
 );
 
+// Cache CSS and JS files with a stale-while-revalidate strategy
+registerRoute(
+  ({ request, url }) =>
+    request.destination === "style" ||
+    request.destination === "script" ||
+    url.pathname.endsWith(".css") ||
+    url.pathname.endsWith(".js"),
+  new StaleWhileRevalidate({
+    cacheName: "static-resources",
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+    ],
+  })
+);
+
 // Cache API calls with a network-first strategy
 registerRoute(
   ({ url }) => url.origin === "https://story-api.dicoding.dev",
@@ -92,15 +109,6 @@ registerRoute(
         maxAgeSeconds: 60 * 60 * 24, // 1 Day
       }),
     ],
-  })
-);
-
-// Cache JS and CSS with a stale-while-revalidate strategy
-registerRoute(
-  ({ request }) =>
-    request.destination === "script" || request.destination === "style",
-  new StaleWhileRevalidate({
-    cacheName: "static-resources",
   })
 );
 
@@ -134,6 +142,18 @@ registerRoute(
     ],
   })
 );
+
+// Fallback for navigation requests
+// If a page is not in the cache or network is unavailable, show a fallback page
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match("/index.html");
+      })
+    );
+  }
+});
 
 // Push notification event
 self.addEventListener("push", (event) => {

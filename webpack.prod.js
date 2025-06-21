@@ -3,12 +3,14 @@ const common = require("./webpack.common.js");
 const webpack = require("webpack");
 const WorkboxWebpackPlugin = require("workbox-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
+const CopyWebpackPlugin = require("copy-webpack-plugin");
 
 module.exports = merge(common, {
   mode: "production",
   output: {
-    filename: "[name].[contenthash].js",
-    chunkFilename: "[name].[contenthash].chunk.js",
+    filename: "js/[name].[contenthash].js",
+    chunkFilename: "js/[name].[contenthash].chunk.js",
+    publicPath: "/",
   },
   module: {
     rules: [
@@ -54,7 +56,10 @@ module.exports = merge(common, {
       "process.env.NODE_ENV": JSON.stringify("production"),
     }),
     new MiniCssExtractPlugin({
-      filename: "[name].[contenthash].css",
+      filename: "css/[name].[contenthash].css",
+    }),
+    new CopyWebpackPlugin({
+      patterns: [{ from: "_redirects", to: "" }],
     }),
     new WorkboxWebpackPlugin.InjectManifest({
       swSrc: "./src/service-worker.js",
