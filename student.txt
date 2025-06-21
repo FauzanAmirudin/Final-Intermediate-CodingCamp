@@ -5,4 +5,18 @@ Submission: Story App - Single Page Application
 API Keys:
 - Leaflet Map: Tidak memerlukan API key (menggunakan OpenStreetMap)
 
-link netlify : https://storyapp12.netlify.app/ 
+link netlify : https://story11.netlify.app/
+
+Implementasi PWA:
+1. Menerapkan Application Shell Architecture untuk memisahkan konten statis dan dinamis.
+2. Implementasi Service Worker dengan Workbox untuk offline capability.
+3. Implementasi Push Notifications menggunakan VAPID key dari Dicoding API.
+4. Aplikasi dapat dipasang ke homescreen (installable).
+5. Data disimpan menggunakan IndexedDB untuk akses offline.
+
+Perubahan Utama:
+1. Mengganti service worker manual dengan implementasi Workbox.
+2. Menambahkan precacheAndRoute untuk caching resource statis.
+3. Menambahkan strategi caching yang sesuai untuk berbagai jenis request.
+4. Menggunakan WorkboxWebpackPlugin.InjectManifest untuk generate service worker.
+5. Memastikan push notification berfungsi dengan baik. 

@@ -134,28 +134,28 @@ class App {
   }
 
   registerServiceWorker() {
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", async () => {
-        try {
-          const registration = await navigator.serviceWorker.register(
-            "/service-worker.js"
-          );
-          console.log(
-            "ServiceWorker registration successful with scope:",
-            registration.scope
-          );
+    window.addEventListener("load", () => {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/service-worker.js").then(
+          (registration) => {
+            console.log(
+              "Service Worker registered with scope:",
+              registration.scope
+            );
 
-          // Check if user is authenticated, then subscribe to push notifications
-          if (AuthUtil.isAuthenticated()) {
-            this.subscribeToPushNotifications();
+            // Check if user is authenticated, then subscribe to push notifications
+            if (AuthUtil.isAuthenticated()) {
+              this.subscribeToPushNotifications();
+            }
+          },
+          (error) => {
+            console.error("Service Worker registration failed:", error);
           }
-        } catch (error) {
-          console.error("ServiceWorker registration failed:", error);
-        }
-      });
-    } else {
-      console.warn("Service workers are not supported in this browser");
-    }
+        );
+      } else {
+        console.warn("Service workers are not supported in this browser");
+      }
+    });
   }
 
   async subscribeToPushNotifications() {

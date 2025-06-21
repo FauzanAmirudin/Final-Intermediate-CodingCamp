@@ -1,3 +1,13 @@
+import { precacheAndRoute } from "workbox-precaching";
+import { registerRoute } from "workbox-routing";
+import {
+  NetworkFirst,
+  CacheFirst,
+  StaleWhileRevalidate,
+} from "workbox-strategies";
+import { CacheableResponsePlugin } from "workbox-cacheable-response";
+import { ExpirationPlugin } from "workbox-expiration";
+
 const CACHE_NAME = "story-app-v1";
 const STATIC_CACHE = "static-v1";
 const DYNAMIC_CACHE = "dynamic-v1";
@@ -23,108 +33,107 @@ const STATIC_ASSETS = [
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
 ];
 
-// Install event - cache static assets
-self.addEventListener("install", (event) => {
-  console.log("[Service Worker] Installing Service Worker...");
-  event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => {
-      console.log("[Service Worker] Precaching App Shell");
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
-});
+// Precache and route the assets
+precacheAndRoute(self.__WB_MANIFEST || []);
 
-// Activate event - clean up old caches
-self.addEventListener("activate", (event) => {
-  console.log("[Service Worker] Activating Service Worker...");
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (
-            cacheName !== STATIC_CACHE &&
-            cacheName !== DYNAMIC_CACHE &&
-            cacheName !== API_CACHE
-          ) {
-            console.log("[Service Worker] Removing old cache:", cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-});
+// Cache the Google Fonts stylesheets with a stale-while-revalidate strategy
+registerRoute(
+  ({ url }) => url.origin === "https://fonts.googleapis.com",
+  new StaleWhileRevalidate({
+    cacheName: "google-fonts-stylesheets",
+  })
+);
 
-// Fetch event - serve from cache, fall back to network
-self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
+// Cache the underlying font files with a cache-first strategy for 1 year
+registerRoute(
+  ({ url }) => url.origin === "https://fonts.gstatic.com",
+  new CacheFirst({
+    cacheName: "google-fonts-webfonts",
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+      new ExpirationPlugin({
+        maxAgeSeconds: 60 * 60 * 24 * 365,
+        maxEntries: 30,
+      }),
+    ],
+  })
+);
 
-  // Handle API requests differently
-  if (url.origin === "https://story-api.dicoding.dev") {
-    // For API requests, try network first, then cache
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          // Clone the response
-          const clonedResponse = response.clone();
+// Cache images with a cache-first strategy
+registerRoute(
+  ({ request }) => request.destination === "image",
+  new CacheFirst({
+    cacheName: "images",
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+      new ExpirationPlugin({
+        maxEntries: 60,
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
+      }),
+    ],
+  })
+);
 
-          // Only cache successful responses
-          if (response.status === 200) {
-            caches.open(API_CACHE).then((cache) => {
-              cache.put(event.request, clonedResponse);
-            });
-          }
+// Cache API calls with a network-first strategy
+registerRoute(
+  ({ url }) => url.origin === "https://story-api.dicoding.dev",
+  new NetworkFirst({
+    cacheName: "api-responses",
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+      new ExpirationPlugin({
+        maxEntries: 100,
+        maxAgeSeconds: 60 * 60 * 24, // 1 Day
+      }),
+    ],
+  })
+);
 
-          return response;
-        })
-        .catch(() => {
-          // If network fails, try to get from cache
-          return caches.match(event.request);
-        })
-    );
-  } else {
-    // For non-API requests, try cache first, then network
-    event.respondWith(
-      caches.match(event.request).then((response) => {
-        // Cache hit - return response
-        if (response) {
-          return response;
-        }
+// Cache JS and CSS with a stale-while-revalidate strategy
+registerRoute(
+  ({ request }) =>
+    request.destination === "script" || request.destination === "style",
+  new StaleWhileRevalidate({
+    cacheName: "static-resources",
+  })
+);
 
-        // Clone the request
-        const fetchRequest = event.request.clone();
+// Cache pages with a network-first strategy
+registerRoute(
+  ({ request }) => request.mode === "navigate",
+  new NetworkFirst({
+    cacheName: "pages",
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+    ],
+  })
+);
 
-        return fetch(fetchRequest)
-          .then((response) => {
-            // Check if we received a valid response
-            if (
-              !response ||
-              response.status !== 200 ||
-              response.type !== "basic"
-            ) {
-              return response;
-            }
-
-            // Clone the response
-            const responseToCache = response.clone();
-
-            // Add to dynamic cache
-            caches.open(DYNAMIC_CACHE).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-
-            return response;
-          })
-          .catch(() => {
-            // If both cache and network fail, return offline fallback
-            if (event.request.headers.get("accept").includes("text/html")) {
-              return caches.match("/index.html");
-            }
-          });
-      })
-    );
-  }
-});
+// Cache other origins with a stale-while-revalidate strategy
+registerRoute(
+  ({ url }) =>
+    url.origin === "https://unpkg.com" || url.origin === "https://leaflet.com",
+  new StaleWhileRevalidate({
+    cacheName: "external-resources",
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+      new ExpirationPlugin({
+        maxEntries: 50,
+        maxAgeSeconds: 24 * 60 * 60, // 1 day
+      }),
+    ],
+  })
+);
 
 // Push notification event
 self.addEventListener("push", (event) => {
@@ -248,17 +257,16 @@ self.addEventListener("pushsubscriptionchange", (event) => {
     .then((subscription) => subscription.options.applicationServerKey);
 
   event.waitUntil(
-    applicationServerKey
-      .then((key) => {
-        return self.registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: key,
-        });
-      })
-      .then((newSubscription) => {
-        // Here you would send the new subscription to your server
-        console.log("[Service Worker] New subscription:", newSubscription);
-        return newSubscription;
-      })
+    Promise.all([
+      applicationServerKey,
+      self.registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey,
+      }),
+    ]).then(([key, subscription]) => {
+      // Send new subscription to server
+      // This is a placeholder as we don't have the actual function here
+      console.log("Push subscription changed and renewed");
+    })
   );
 });

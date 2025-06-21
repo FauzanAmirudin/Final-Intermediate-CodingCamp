@@ -1,6 +1,7 @@
 const { merge } = require("webpack-merge");
 const common = require("./webpack.common.js");
 const webpack = require("webpack");
+const WorkboxWebpackPlugin = require("workbox-webpack-plugin");
 
 module.exports = merge(common, {
   mode: "production",
@@ -36,6 +37,11 @@ module.exports = merge(common, {
   plugins: [
     new webpack.DefinePlugin({
       "process.env.NODE_ENV": JSON.stringify("production"),
+    }),
+    new WorkboxWebpackPlugin.InjectManifest({
+      swSrc: "./src/service-worker.js",
+      swDest: "service-worker.js",
+      maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
     }),
   ],
 });

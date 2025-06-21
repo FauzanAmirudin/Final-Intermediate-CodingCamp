@@ -36,7 +36,6 @@ module.exports = {
       patterns: [
         { from: "manifest.json", to: "" },
         { from: "icons", to: "icons" },
-        { from: "src/service-worker.js", to: "service-worker.js" },
         { from: "_redirects", to: "" },
       ],
     }),
